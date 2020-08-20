@@ -301,7 +301,7 @@ struct bpf_object *load_bpf_and_xdp_attach(struct config *cfg)
 static const char *xdp_action_names[XDP_ACTION_MAX] = {
 	[XDP_ABORTED]   = "XDP_ABORTED",
 	[XDP_DROP]      = "XDP_DROP",
-	[XDP_PASS]      = "XDP_PASS",
+	[XDP_PASS]      = "XDP_PASS_AS_KEY",
 	[XDP_TX]        = "XDP_TX",
 	[XDP_REDIRECT]  = "XDP_REDIRECT",
 	[XDP_UNKNOWN]	= "XDP_UNKNOWN",
