@@ -46,33 +46,6 @@ struct vlan_hdr
 	__be16 h_vlan_encapsulated_proto;
 };
 
-struct packet_metadata
-{
-	u16 ethernet_protocol;
-	u32 ip_src;
-	u32 ip_dst;
-	u8 ip_ttl;
-	u8 ip_protocol;
-
-	/* populated for both TCP and UDP */
-	__be16 src_p;
-	__be16 dst_p;
-	__be32 length; // payload length
-
-	/* this is populated if TCP Only */
-	__be32 acknowledge;
-	__be32 sequence;
-	__be16 window;
-	__be16 urg_ptr;
-	__u16 cwr,
-		ece,
-		urg,
-		ack,
-		psh,
-		rst,
-		syn,
-		fin;
-};
 
 struct bpf_map_def SEC("maps") xdp_stats_map = {
 	.type = BPF_MAP_TYPE_ARRAY,
@@ -156,6 +129,7 @@ static __always_inline
 			metadata->src_p = bpf_htons(udph->source);
 			metadata->dst_p = bpf_htons(udph->dest);
 			metadata->length = data_end - current;
+			metadata->key = metadata->ip_src ^ metadata->ip_dst ^ metadata->src_p ^ metadata->dst_p ^ metadata->ip_protocol;
 			bpf_debug("(UDP) src:%u, dst:%u, payload:%d", metadata->src_p, metadata->dst_p, metadata->length);
 		}
 	}
@@ -183,6 +157,7 @@ static __always_inline
 			metadata->syn = tcph->syn;
 			metadata->fin = tcph->fin;
 			metadata->length = data_end - current;
+			metadata->key = metadata->ip_src ^ metadata->ip_dst ^ metadata->src_p ^ metadata->dst_p ^ metadata->ip_protocol;
 			bpf_debug("(TCP) src:%u, dst:%u, payload:%d", metadata->src_p, metadata->dst_p, metadata->length);
 		}
 	}
