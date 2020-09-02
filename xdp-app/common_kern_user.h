@@ -36,8 +36,13 @@ struct packet_metadata
 		fin;
 };
 
+struct total_keys {
+	__u64 total_keys;
+};
+
 struct flow_key_info
 {
+	__u32 key;
 	__u32 ip_src;
 	__u32 ip_dst;
 	__be16 src_p;

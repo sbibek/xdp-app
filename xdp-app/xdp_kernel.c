@@ -46,6 +46,7 @@ struct vlan_hdr
 	__be16 h_vlan_encapsulated_proto;
 };
 
+#define TOTAL_KEYS 0
 
 struct bpf_map_def SEC("maps") xdp_stats_map = {
 	.type = BPF_MAP_TYPE_ARRAY,
@@ -55,9 +56,9 @@ struct bpf_map_def SEC("maps") xdp_stats_map = {
 
 };
 struct bpf_map_def SEC("maps") xdp_total_keys = {
-	.type = BPF_MAP_TYPE_ARRAY,
+	.type = BPF_MAP_TYPE_HASH,
 	.key_size = sizeof(__u32),
-	.value_size = sizeof(__u64),
+	.value_size = sizeof(struct total_keys),
 	.max_entries = 1,
 };
 
@@ -69,13 +70,11 @@ struct bpf_map_def SEC("maps") xdp_flow_keys = {
 };
 
 struct bpf_map_def SEC("maps") xdp_flows = {
-	.type = BPF_MAP_TYPE_ARRAY,
+	.type = BPF_MAP_TYPE_HASH,
 	.key_size = sizeof(__u32),
 	.value_size = sizeof(struct flows_info),
 	.max_entries = 10000,
 };
-
-
 
 static __always_inline bool parse_eth(struct ethhdr *eth, void *data_end,
 									  u16 *eth_proto, u64 *l3_offset, struct packet_metadata *metadata)
@@ -229,7 +228,7 @@ int xdp_stats(struct xdp_md *ctx)
 	void *data = (void *)(long)ctx->data;
 
 	struct ethhdr *eth = data;
-	struct packet_metadata metadata;
+	struct packet_metadata metadata = {};
 	u16 eth_proto = 0;
 	u64 l3_offset = 0;
 
@@ -243,8 +242,68 @@ int xdp_stats(struct xdp_md *ctx)
 	handle_eth_protocol(ctx, eth_proto, l3_offset, &metadata);
 
 	// TODO with metadata
+	__u32 totalKeys = TOTAL_KEYS;
+	struct total_keys *keysCount = bpf_map_lookup_elem(&xdp_total_keys, &totalKeys);
+	if (!keysCount)
+	{
+		// means there is no keys count yet so, lets initialize it
+		struct total_keys tkeys = {
+			.total_keys = 0,
+		};
 
-	return XDP_PASS;
+		bpf_map_update_elem(&xdp_total_keys, &totalKeys, &tkeys, BPF_ANY);
+		keysCount = bpf_map_lookup_elem(&xdp_total_keys, &totalKeys);
+	}
+
+	if (keysCount)
+	{
+		// now we are sure that we have the total keys
+		struct flows_info *flowsInfo = bpf_map_lookup_elem(&xdp_flows, &metadata.key);
+
+		if (!flowsInfo)
+		{
+			struct flow_key_info flowKeyInfo = {
+				.key = metadata.key,
+				.ip_src = metadata.ip_src,
+				.ip_dst = metadata.ip_dst,
+				.src_p = metadata.src_p,
+				.dst_p = metadata.dst_p,
+				.ip_protocol = metadata.ip_protocol,
+			};
+			bpf_map_update_elem(&xdp_flow_keys, &keysCount->total_keys, &flowKeyInfo, BPF_ANY);
+			lock_xadd(&keysCount->total_keys, 1);
+		}
+
+		if (!flowsInfo)
+		{
+			// ++keysCount->total_keys;
+
+			// now we add the flow
+			struct flows_info fi = {
+				.totalPackets = 0,
+				.totalBytes = 0,
+				.totalRxBytes = 0,
+				.totalTxBytes = 0,
+				.totalTtl = 0,
+				.totalEce = 0,
+				.totalUrg = 0,
+				.totalAck = 0,
+				.totalPsh = 0,
+				.totalRst = 0,
+				.totalSyn = 0,
+				.totalFin = 0};
+			bpf_map_update_elem(&xdp_flows, &metadata.key,&fi, BPF_ANY);
+			flowsInfo = bpf_map_lookup_elem(&xdp_flows, &metadata.key);
+		}
+
+		// // by here, we should have a valid flow info
+		if(flowsInfo) {
+			lock_xadd(&flowsInfo->totalPackets, 1);
+			bpf_debug("key: %u, total flows %llu, totalPackets: %llu\n", metadata.key, keysCount->total_keys, flowsInfo->totalPackets);
+		}
+	}
+
+		return XDP_PASS;
 }
 
 char _license[] SEC("license") = "GPL";
