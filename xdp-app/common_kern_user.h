@@ -9,7 +9,7 @@ struct datarec
 
 struct packet_metadata
 {
-	__u64 key;
+	__u32 key;
 	__u16 ethernet_protocol;
 	__u32 ip_src;
 	__u32 ip_dst;
@@ -43,6 +43,21 @@ struct flow_key_info
 	__be16 src_p;
 	__be16 dst_p;
 	__u8 ip_protocol;
+};
+
+struct flows_info {
+	__u64 totalPackets,
+			totalBytes,
+			totalRxBytes,
+			totalTxBytes,
+			totalTtl,
+			totalEce,
+			totalUrg,
+			totalAck,
+			totalPsh,
+			totalRst,
+			totalSyn,
+			totalFin;
 };
 
 #ifndef XDP_ACTION_MAX

@@ -54,6 +54,28 @@ struct bpf_map_def SEC("maps") xdp_stats_map = {
 	.max_entries = XDP_ACTION_MAX,
 
 };
+struct bpf_map_def SEC("maps") xdp_total_keys = {
+	.type = BPF_MAP_TYPE_ARRAY,
+	.key_size = sizeof(__u32),
+	.value_size = sizeof(__u64),
+	.max_entries = 1,
+};
+
+struct bpf_map_def SEC("maps") xdp_flow_keys = {
+	.type = BPF_MAP_TYPE_ARRAY,
+	.key_size = sizeof(__u32),
+	.value_size = sizeof(struct flow_key_info),
+	.max_entries = 10000,
+};
+
+struct bpf_map_def SEC("maps") xdp_flows = {
+	.type = BPF_MAP_TYPE_ARRAY,
+	.key_size = sizeof(__u32),
+	.value_size = sizeof(struct flows_info),
+	.max_entries = 10000,
+};
+
+
 
 static __always_inline bool parse_eth(struct ethhdr *eth, void *data_end,
 									  u16 *eth_proto, u64 *l3_offset, struct packet_metadata *metadata)
