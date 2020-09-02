@@ -76,6 +76,13 @@ struct bpf_map_def SEC("maps") xdp_flows = {
 	.max_entries = MAX_ENTRIES_FLOWS,
 };
 
+struct bpf_map_def SEC("maps") xdp_flows_history = {
+	.type = BPF_MAP_TYPE_HASH,
+	.key_size = sizeof(__u32),
+	.value_size = sizeof(struct flows_info),
+	.max_entries = MAX_ENTRIES_FLOWS,
+};
+
 static __always_inline bool parse_eth(struct ethhdr *eth, void *data_end,
 									  u16 *eth_proto, u64 *l3_offset, struct packet_metadata *metadata)
 {

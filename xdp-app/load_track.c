@@ -120,6 +120,17 @@ static double calc_period(struct record *r, struct record *p)
 	return period_;
 }
 
+static double claculate_period(__u64 t1, __u64 t2) {
+	double period_ = 0;
+	__u64 period = 0;
+
+	period = t2 - t1;
+	if (period > 0)
+		period_ = ((double)period / NANOSEC_PER_SEC);
+
+	return period_;
+}
+
 static void stats_print(struct stats_record *stats_rec,
 						struct stats_record *stats_prev)
 {
@@ -175,7 +186,31 @@ void map_get_total_keys(int fd, struct total_keys *value) {
 	}
 }
 
-void map_get_keys(int fd, __u32 totalKeys, int flowsfd)
+void update_flow_history(int fd, struct flow_key_info *fki, struct flows_info *info){
+	struct flows_info fi = {0};
+	if ((bpf_map_lookup_elem(fd, &fki->key, &fi)) != 0){
+		// this means we have to create a new entry
+		bpf_map_update_elem(fd, &fki->key, info, BPF_ANY);
+	} else {
+		// we already have it means we just need to update it
+		fi.timestamp = info->timestamp;
+		fi.totalPackets = info->totalPackets;
+		fi.totalBytes = info->totalBytes;
+		fi.totalRxBytes = info->totalRxBytes;
+		fi.totalTxBytes = info->totalTxBytes;
+		fi.totalTtl = info->totalTtl;
+		fi.totalEce = info->totalEce;
+		fi.totalUrg = info->totalUrg;
+		fi.totalAck = info->totalAck;
+		fi.totalPsh = info->totalPsh;
+		fi.totalRst = info->totalRst;
+		fi.totalSyn = info->totalSyn;
+		fi.totalFin = info->totalFin;
+		bpf_map_update_elem(fd, &fki->key, &fi, BPF_ANY);
+	}
+}
+
+void map_get_keys(int fd, __u32 totalKeys, int flowsfd, int flowsbackupfd)
 {
 	for (__u32 i = 0; i < totalKeys; i++)
 	{
@@ -196,6 +231,19 @@ void map_get_keys(int fd, __u32 totalKeys, int flowsfd)
 					);
 			} else {
 				printf("total packets: %llu, total bytes: %llu\n", finfo.totalPackets, finfo.totalBytes);
+				// now we check the history
+				finfo.timestamp = gettime();
+				struct flows_info history = {0};
+				if(bpf_map_lookup_elem(flowsbackupfd, &value.key, &history) != 0) {
+					printf("no backup found for this flow, so creating backup");
+					update_flow_history(flowsbackupfd, &value, &finfo);
+				} else {
+					// means there is backup already for this
+					double period = claculate_period(history.timestamp,finfo.timestamp);
+					printf("%llu perid calculated %f\n",history.timestamp, period);
+					// now lets update it with the newer one
+					update_flow_history(flowsbackupfd, &value, &finfo);
+				}
 			}
 		}
 	}
@@ -247,11 +295,11 @@ static void stats_collect(int map_fd, __u32 map_type,
 	map_collect(map_fd, map_type, key, &stats_rec->stats[0]);
 }
 
-static void collect(int totalkeysfd, int flowkeysfd, int flowsfd){
+static void collect(int totalkeysfd, int flowkeysfd, int flowsfd, int flowsbackupfd){
 	struct total_keys tk = {0};
 	map_get_total_keys(totalkeysfd, &tk);
 	printf("total keys %u\n", tk.total_keys);
-	map_get_keys(flowkeysfd,tk.total_keys, flowsfd);
+	map_get_keys(flowkeysfd,tk.total_keys, flowsfd, flowsbackupfd);
 }
 
 static void stats_poll(int map_fd, __u32 map_type, int interval)
@@ -272,12 +320,12 @@ static void stats_poll(int map_fd, __u32 map_type, int interval)
 	}
 }
 
-static void __poll(int totalflowsfd, int flowkeysfd, int flowsfd, int interval)
+static void __poll(int totalflowsfd, int flowkeysfd, int flowsfd, int flowsbackupfd, int interval)
 {
 	setlocale(LC_NUMERIC, "en_US");
 	while (1)
 	{
-		collect(totalflowsfd, flowkeysfd, flowsfd);
+		collect(totalflowsfd, flowkeysfd, flowsfd, flowsbackupfd);
 		sleep(interval);
 	}
 }
@@ -340,8 +388,8 @@ int main(int argc, char **argv)
 	int stats_map_fd;
 
 	struct bpf_map_info map_expect_totalkeys = {0}, map_expect_flowskeys = {0}, map_expect_flows = {0};
-	int totalKeysFd, flowKeysFd, flowsFd;
-	struct bpf_map_info totalkeysinfo = {0}, flowkeysinfo = {0}, flowsinfo = {0};
+	int totalKeysFd, flowKeysFd, flowsFd, flowsBackupFd;
+	struct bpf_map_info totalkeysinfo = {0}, flowkeysinfo = {0}, flowsinfo = {0}, flowsbackupinfo={0};
 	int interval = 2;
 	int err;
 
@@ -382,9 +430,10 @@ int main(int argc, char **argv)
 	totalKeysFd = find_map_fd(bpf_obj, "xdp_total_keys");
 	flowKeysFd = find_map_fd(bpf_obj, "xdp_flow_keys");
 	flowsFd = find_map_fd(bpf_obj, "xdp_flows");
+	flowsBackupFd = find_map_fd(bpf_obj, "xdp_flows_history");
 
 	// detach and return if any of the maps are not found;
-	if (stats_map_fd < 0 || totalKeysFd < 0 || flowKeysFd < 0 || flowsFd < 0)
+	if (stats_map_fd < 0 || totalKeysFd < 0 || flowKeysFd < 0 || flowsFd < 0 || flowsBackupFd < 0)
 	{
 		xdp_link_detach(cfg.ifindex, cfg.xdp_flags, 0);
 		return EXIT_FAIL_BPF;
@@ -410,7 +459,8 @@ int main(int argc, char **argv)
 	if (err ||
 		__check_map_fd_info(totalKeysFd, &totalkeysinfo, &map_expect_totalkeys) ||
 		__check_map_fd_info(flowKeysFd, &flowkeysinfo, &map_expect_flowskeys) ||
-		__check_map_fd_info(flowsFd, &flowsinfo, &map_expect_flows))
+		__check_map_fd_info(flowsFd, &flowsinfo, &map_expect_flows) ||
+		__check_map_fd_info(flowsBackupFd, &flowsbackupinfo, &map_expect_flows))
 	{
 		fprintf(stderr, "ERR: map via FD not compatible\n");
 		return err;
@@ -425,6 +475,6 @@ int main(int argc, char **argv)
 	}
 
 	// stats_poll(stats_map_fd, info.type, interval);
-	__poll(totalKeysFd, flowKeysFd, flowsFd, interval);
+	__poll(totalKeysFd, flowKeysFd, flowsFd, flowsBackupFd, interval);
 	return EXIT_OK;
 }

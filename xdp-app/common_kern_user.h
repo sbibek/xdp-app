@@ -56,6 +56,7 @@ struct flow_key_info
 };
 
 struct flows_info {
+	__u64 timestamp;
 	__u64 totalPackets,
 			totalBytes,
 			totalRxBytes,
