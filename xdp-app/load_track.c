@@ -175,13 +175,28 @@ void map_get_total_keys(int fd, struct total_keys *value) {
 	}
 }
 
-void map_get_keys(int fd, __u32 totalKeys) {
-	for(__u32 i=0; i<totalKeys; i++) {
+void map_get_keys(int fd, __u32 totalKeys, int flowsfd)
+{
+	for (__u32 i = 0; i < totalKeys; i++)
+	{
 		struct flow_key_info value = {0};
-		if ((bpf_map_lookup_elem(fd, &i, &value)) != 0){
-				printf("unable to lookup");
-		} else {
+		if ((bpf_map_lookup_elem(fd, &i, &value)) != 0)
+		{
+			printf("unable to lookup");
+		}
+		else
+		{
 			printf("keys:: %u, %u, %u\n", value.key, value.src_p, value.dst_p);
+
+			struct flows_info finfo = {0};
+			if ((bpf_map_lookup_elem(flowsfd, &value.key, &finfo)) != 0)
+			{
+					printf(
+				"unable to get finfo"
+					);
+			} else {
+				printf("total packets: %llu, total bytes: %llu\n", finfo.totalPackets, finfo.totalBytes);
+			}
 		}
 	}
 }
@@ -236,7 +251,7 @@ static void collect(int totalkeysfd, int flowkeysfd, int flowsfd){
 	struct total_keys tk = {0};
 	map_get_total_keys(totalkeysfd, &tk);
 	printf("total keys %u\n", tk.total_keys);
-	map_get_keys(flowkeysfd,tk.total_keys);
+	map_get_keys(flowkeysfd,tk.total_keys, flowsfd);
 }
 
 static void stats_poll(int map_fd, __u32 map_type, int interval)
