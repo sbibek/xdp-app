@@ -46,7 +46,7 @@ struct vlan_hdr
 	__be16 h_vlan_encapsulated_proto;
 };
 
-#define TOTAL_KEYS 0
+// #define TOTAL_KEYS 0
 
 struct bpf_map_def SEC("maps") xdp_stats_map = {
 	.type = BPF_MAP_TYPE_ARRAY,
@@ -59,21 +59,21 @@ struct bpf_map_def SEC("maps") xdp_total_keys = {
 	.type = BPF_MAP_TYPE_HASH,
 	.key_size = sizeof(__u32),
 	.value_size = sizeof(struct total_keys),
-	.max_entries = 1,
+	.max_entries = MAX_ENTRIES_TOTAL_KEYS,
 };
 
 struct bpf_map_def SEC("maps") xdp_flow_keys = {
 	.type = BPF_MAP_TYPE_ARRAY,
 	.key_size = sizeof(__u32),
 	.value_size = sizeof(struct flow_key_info),
-	.max_entries = 10000,
+	.max_entries = MAX_ENTRIES_FLOW_KEYS,
 };
 
 struct bpf_map_def SEC("maps") xdp_flows = {
 	.type = BPF_MAP_TYPE_HASH,
 	.key_size = sizeof(__u32),
 	.value_size = sizeof(struct flows_info),
-	.max_entries = 10000,
+	.max_entries = MAX_ENTRIES_FLOWS,
 };
 
 static __always_inline bool parse_eth(struct ethhdr *eth, void *data_end,
@@ -228,7 +228,29 @@ int xdp_stats(struct xdp_md *ctx)
 	void *data = (void *)(long)ctx->data;
 
 	struct ethhdr *eth = data;
-	struct packet_metadata metadata = {};
+	struct packet_metadata metadata = {
+		.key = 0,
+		.ethernet_protocol = 0,
+		.ip_src = 0,
+		.ip_dst = 0,
+		.ip_ttl = 0,
+		.ip_protocol = 0,
+		.src_p = 0,
+		.dst_p = 0,
+		.length = 0,
+		.acknowledge = 0,
+		.sequence = 0,
+		.window = 0,
+		.urg_ptr = 0,
+		.cwr = 0,
+		.ece = 0,
+		.urg = 0,
+		.ack = 0,
+		.psh = 0,
+		.rst = 0,
+		.syn = 0,
+		.fin = 0,
+	};
 	u16 eth_proto = 0;
 	u64 l3_offset = 0;
 
@@ -297,9 +319,27 @@ int xdp_stats(struct xdp_md *ctx)
 		}
 
 		// // by here, we should have a valid flow info
-		if(flowsInfo) {
+		if (flowsInfo)
+		{
 			lock_xadd(&flowsInfo->totalPackets, 1);
+			lock_xadd(&flowsInfo->totalBytes, metadata.length);
+
+			if(eth_proto == ETH_P_IP){ 
+				lock_xadd(&flowsInfo->totalTtl, metadata.ip_ttl);
+			}	
+
+			if (metadata.ip_protocol == IPPROTO_TCP)
+			{
+				lock_xadd(&flowsInfo->totalEce, metadata.ece);
+				lock_xadd(&flowsInfo->totalUrg, metadata.urg);
+				lock_xadd(&flowsInfo->totalAck, metadata.ack);
+				lock_xadd(&flowsInfo->totalPsh, metadata.psh);
+				lock_xadd(&flowsInfo->totalRst, metadata.rst);
+				lock_xadd(&flowsInfo->totalSyn, metadata.syn);
+				lock_xadd(&flowsInfo->totalFin, metadata.fin);
+			}
 			bpf_debug("key: %u, total flows %llu, totalPackets: %llu\n", metadata.key, keysCount->total_keys, flowsInfo->totalPackets);
+			bpf_debug("totalBytes: %llu\n", flowsInfo->totalBytes);
 		}
 	}
 

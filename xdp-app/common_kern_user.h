@@ -1,6 +1,11 @@
 #ifndef __COMMON_KERN_USER_H
 #define __COMMON_KERN_USER_H
 
+#define TOTAL_KEYS 0
+#define MAX_ENTRIES_TOTAL_KEYS 1
+#define MAX_ENTRIES_FLOW_KEYS 10000
+#define MAX_ENTRIES_FLOWS 10000
+
 struct datarec
 {
 	__u64 rx_packets;
