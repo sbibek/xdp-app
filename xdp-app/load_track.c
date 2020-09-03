@@ -210,6 +210,19 @@ void update_flow_history(int fd, struct flow_key_info *fki, struct flows_info *i
 	}
 }
 
+void process(struct flow_key_info *fki, struct flows_info *history, struct flows_info *current, double period){
+	double pps = (current->totalPackets - history->totalPackets)/period;
+	double bps = (current->totalBytes - history->totalBytes)/ period;
+	double synRate = (current->totalSyn - history->totalSyn)/period;
+	double ackRate = (current->totalAck - history->totalAck)/period;
+	double pshRate = (current->totalPsh - history->totalPsh)/period;
+	double rstRate = (current->totalRst - history->totalRst)/period;
+	double finRate = (current->totalFin - history->totalFin)/period;
+
+	printf("%u <-> %u (%llu packets) (%llu bytes) %f pps, %f bps, %f seconds\n synrate: %f, ackrate: %f, pshrate: %f, rstrate: %f, finrate: %f\n", fki->src_p, fki->dst_p, history->totalPackets, history->totalBytes, pps, bps, period,
+	synRate, ackRate, pshRate, rstRate, finRate);
+}
+
 void map_get_keys(int fd, __u32 totalKeys, int flowsfd, int flowsbackupfd)
 {
 	for (__u32 i = 0; i < totalKeys; i++)
@@ -221,7 +234,7 @@ void map_get_keys(int fd, __u32 totalKeys, int flowsfd, int flowsbackupfd)
 		}
 		else
 		{
-			printf("keys:: %u, %u, %u\n", value.key, value.src_p, value.dst_p);
+			//printf("keys:: %u, %u, %u\n", value.key, value.src_p, value.dst_p);
 
 			struct flows_info finfo = {0};
 			if ((bpf_map_lookup_elem(flowsfd, &value.key, &finfo)) != 0)
@@ -230,7 +243,7 @@ void map_get_keys(int fd, __u32 totalKeys, int flowsfd, int flowsbackupfd)
 				"unable to get finfo"
 					);
 			} else {
-				printf("total packets: %llu, total bytes: %llu\n", finfo.totalPackets, finfo.totalBytes);
+				//printf("total packets: %llu, total bytes: %llu\n", finfo.totalPackets, finfo.totalBytes);
 				// now we check the history
 				finfo.timestamp = gettime();
 				struct flows_info history = {0};
@@ -240,7 +253,8 @@ void map_get_keys(int fd, __u32 totalKeys, int flowsfd, int flowsbackupfd)
 				} else {
 					// means there is backup already for this
 					double period = claculate_period(history.timestamp,finfo.timestamp);
-					printf("%llu perid calculated %f\n",history.timestamp, period);
+					process(&value, &history, &finfo, period);
+					// printf("%llu perid calculated %f\n",history.timestamp, period);
 					// now lets update it with the newer one
 					update_flow_history(flowsbackupfd, &value, &finfo);
 				}
@@ -298,7 +312,7 @@ static void stats_collect(int map_fd, __u32 map_type,
 static void collect(int totalkeysfd, int flowkeysfd, int flowsfd, int flowsbackupfd){
 	struct total_keys tk = {0};
 	map_get_total_keys(totalkeysfd, &tk);
-	printf("total keys %u\n", tk.total_keys);
+	//printf("total keys %u\n", tk.total_keys);
 	map_get_keys(flowkeysfd,tk.total_keys, flowsfd, flowsbackupfd);
 }
 

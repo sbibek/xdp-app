@@ -231,6 +231,7 @@ static __always_inline
 SEC("xdp_stats_kernel")
 int xdp_stats(struct xdp_md *ctx)
 {
+	bpf_debug("<-->\n");
 	void *data_end = (void *)(long)ctx->data_end;
 	void *data = (void *)(long)ctx->data;
 
