@@ -26,6 +26,8 @@ static const char *__doc__ = "XDP loader and stats program\n"
 static const char *default_filename = "xdp_kernel.o";
 static const char *default_progsec = "xdp_stats";
 
+#define MAX_U64 18446744073709551615
+
 static const struct option_wrapper long_options[] = {
 	{{"help", no_argument, NULL, 'h'},
 	 "Show help",
@@ -210,17 +212,31 @@ void update_flow_history(int fd, struct flow_key_info *fki, struct flows_info *i
 	}
 }
 
-void process(struct flow_key_info *fki, struct flows_info *history, struct flows_info *current, double period){
-	double pps = (current->totalPackets - history->totalPackets)/period;
-	double bps = (current->totalBytes - history->totalBytes)/ period;
-	double synRate = (current->totalSyn - history->totalSyn)/period;
-	double ackRate = (current->totalAck - history->totalAck)/period;
-	double pshRate = (current->totalPsh - history->totalPsh)/period;
-	double rstRate = (current->totalRst - history->totalRst)/period;
-	double finRate = (current->totalFin - history->totalFin)/period;
+__u64 __diffu64Adjusted(__u64 new, __u64 old) {
+	if(old > new) {
+		return MAX_U64 - old + new;
+	} else {
+		return new - old;
+	}
+}
 
-	printf("%u <-> %u (%llu packets) (%llu bytes) %f pps, %f bps, %f seconds\n synrate: %f, ackrate: %f, pshrate: %f, rstrate: %f, finrate: %f\n", fki->src_p, fki->dst_p, history->totalPackets, history->totalBytes, pps, bps, period,
+void process(struct flow_key_info *fki, struct flows_info *history, struct flows_info *current, double period){
+	double pps = __diffu64Adjusted(current->totalPackets,history->totalPackets)/(period*1000000);
+	double bps = __diffu64Adjusted(current->totalBytes, history->totalBytes)/ period;
+	double Mbitps = bps * 8/(1024*1024);
+	double synRate = __diffu64Adjusted(current->totalSyn , history->totalSyn)/period;
+	double ackRate = __diffu64Adjusted(current->totalAck , history->totalAck)/period;
+	double pshRate = __diffu64Adjusted(current->totalPsh , history->totalPsh)/period;
+	double rstRate = __diffu64Adjusted(current->totalRst , history->totalRst)/period;
+	double finRate = __diffu64Adjusted(current->totalFin , history->totalFin)/period;
+	if(Mbitps < 1024) {
+		printf("%u <-> %u (%llu packets) (%llu bytes) %f million pps(*), %f Mbits/sec(**), %f seconds\n synrate: %f, ackrate: %f, pshrate: %f, rstrate: %f, finrate: %f\n", fki->src_p, fki->dst_p, history->totalPackets, history->totalBytes, pps, Mbitps, period,
 	synRate, ackRate, pshRate, rstRate, finRate);
+	} else {
+		printf("%u <-> %u (%llu packets) (%llu bytes) %f million pps(*), %f Gbits/sec(**), %f seconds\n synrate: %f, ackrate: %f, pshrate: %f, rstrate: %f, finrate: %f\n", fki->src_p, fki->dst_p, history->totalPackets, history->totalBytes, pps, Mbitps/1024, period,
+	synRate, ackRate, pshRate, rstRate, finRate);
+
+	}
 }
 
 void map_get_keys(int fd, __u32 totalKeys, int flowsfd, int flowsbackupfd)
@@ -248,7 +264,7 @@ void map_get_keys(int fd, __u32 totalKeys, int flowsfd, int flowsbackupfd)
 				finfo.timestamp = gettime();
 				struct flows_info history = {0};
 				if(bpf_map_lookup_elem(flowsbackupfd, &value.key, &history) != 0) {
-					printf("no backup found for this flow, so creating backup");
+					//printf("no backup found for this flow, so creating backup**\n");
 					update_flow_history(flowsbackupfd, &value, &finfo);
 				} else {
 					// means there is backup already for this

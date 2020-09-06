@@ -259,6 +259,7 @@ int xdp_stats(struct xdp_md *ctx)
 		.syn = 0,
 		.fin = 0,
 	};
+
 	u16 eth_proto = 0;
 	u64 l3_offset = 0;
 
