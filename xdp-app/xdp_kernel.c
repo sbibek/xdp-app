@@ -13,6 +13,77 @@
 #include <linux/udp.h>
 #include <stdbool.h>
 
+/** for the crc16 implementation only **/
+// #define		CRC_START_16		0x0000
+// #define		CRC_POLY_16		0xA001
+// #define NULL ((void*)0)
+
+// static bool  crc_tab16_init = false;
+// static __u16 crc_tab16[256];
+
+// static void init_crc16_tab( void ) {
+// 	__u16 i;
+// 	__u16 j;
+// 	__u16 crc;
+// 	__u16 c;
+
+// 	#pragma unroll
+// 	for (i=0; i<256; i++) {
+// 		crc = 0;
+// 		c   = i;
+// 		#pragma unroll
+// 		for (j=0; j<8; j++) {
+// 			if ( (crc ^ c) & 0x0001 ) crc = ( crc >> 1 ) ^ CRC_POLY_16;
+// 			else                      crc =   crc >> 1;
+// 			c = c >> 1;
+// 		}
+// 		crc_tab16[i] = crc;
+// 	}
+// 	crc_tab16_init = true;
+// }
+
+// __u16 crc_16( const unsigned char *input_str, __u32 num_bytes, __u16 *prev_crc ) {
+// 	__u16 crc;
+// 	const unsigned char *ptr;
+// 	__u32 a;
+
+// 	if ( ! crc_tab16_init ) init_crc16_tab();
+
+//     if(prev_crc) {
+//         crc = *prev_crc;
+//     } else {
+//     	crc = CRC_START_16;
+// 	}
+
+// 	ptr = input_str;
+
+// 	if ( ptr != NULL ) for (a=0; a<num_bytes; a++) {
+
+// 		crc = (crc >> 8) ^ crc_tab16[ (crc ^ (__u16) *ptr++) & 0x00FF ];
+// 	}
+// 	return crc;
+// }
+/** for the crc16 implementation only **/
+
+// static __always_inline
+// unsigned long checksum_update(unsigned char *buf, int bufsz, unsigned long *prev_checksum) {
+//     unsigned long sum = 0;
+
+//     if(prev_checksum) {
+//         sum = (*prev_checksum);
+//     }
+
+//     while (bufsz > 0) {
+//         sum += *buf;
+//         buf++;
+//         bufsz -= 1;
+//         sum = (sum & 0xffff) + (sum >> 16);
+//         sum = (sum & 0xffff) + (sum >> 16);
+//     }
+
+//     return sum;
+// }
+
 typedef __u8 u8;
 typedef __u16 u16;
 typedef __u32 u32;
@@ -33,11 +104,6 @@ typedef __u64 u64;
 		bpf_trace_printk(____fmt, sizeof(____fmt), \
 						 ##__VA_ARGS__);           \
 	})
-#else
-#define bpf_debug(fmt, ...) \
-	{                       \
-	}                       \
-	while (0)
 #endif
 
 struct vlan_hdr
@@ -55,6 +121,7 @@ struct bpf_map_def SEC("maps") xdp_stats_map = {
 	.max_entries = XDP_ACTION_MAX,
 
 };
+
 struct bpf_map_def SEC("maps") xdp_total_keys = {
 	.type = BPF_MAP_TYPE_HASH,
 	.key_size = sizeof(__u32),
@@ -94,7 +161,8 @@ static __always_inline bool parse_eth(struct ethhdr *eth, void *data_end,
 		return false;
 
 	eth_type = eth->h_proto;
-	//bpf_debug("Debug: eth_type:0x%x\n", bpf_ntohs(eth_type));
+	metadata->ethernet_protocol = bpf_ntohs(eth_type);
+	//bpf_debug("type:0x%x\n", bpf_ntohs(eth_type));
 
 	/* Skip non 802.3 Ethertypes */
 	if (bpf_ntohs(eth_type) < ETH_P_802_3_MIN)
@@ -116,7 +184,7 @@ static __always_inline bool parse_eth(struct ethhdr *eth, void *data_end,
 	*l3_offset = offset;
 
 	// populate the metadata
-	metadata->ethernet_protocol = bpf_ntohs(eth_type);
+
 	bpf_debug("metadata: eth_type:0x%x\n", metadata->ethernet_protocol);
 
 	return true;
@@ -132,7 +200,9 @@ static __always_inline
 
 	if (iph + 1 > data_end)
 	{
-		bpf_debug("Invalid IPv4 packet: L3off:%llu\n", l3_offset);
+#ifdef DEBUG
+		//bpf_debug("Invalid IPv4 packet: L3off:%llu\n", l3_offset);
+#endif
 		return XDP_ABORTED;
 	}
 
@@ -140,7 +210,9 @@ static __always_inline
 	metadata->ip_src = bpf_ntohl(iph->saddr);
 	metadata->ip_dst = bpf_ntohl(iph->daddr);
 	metadata->ip_protocol = iph->protocol;
-	bpf_debug("saddr:0x%x, daddr:0x%x, protocol:%u\n", metadata->ip_src, metadata->ip_dst, metadata->ip_protocol);
+#ifdef DEBUG
+	//bpf_debug("saddr:0x%x, daddr:0x%x, protocol:%u\n", metadata->ip_src, metadata->ip_dst, metadata->ip_protocol);
+#endif
 
 	void *h = iph + 1;
 	if (iph->protocol == IPPROTO_UDP)
@@ -148,8 +220,10 @@ static __always_inline
 		struct udphdr *udph = h;
 		if (udph + 1 > data_end)
 		{
-			bpf_debug("Invalid UDPv4 packet: L4off:%llu\n",
-					  sizeof(struct iphdr) + sizeof(struct udphdr));
+#ifdef DEBUG
+			// bpf_debug("Invalid UDPv4 packet: L4off:%llu\n",
+					//   sizeof(struct iphdr) + sizeof(struct udphdr));
+#endif
 		}
 		else
 		{
@@ -158,7 +232,9 @@ static __always_inline
 			metadata->dst_p = bpf_htons(udph->dest);
 			metadata->length = data_end - current;
 			metadata->key = metadata->ip_src ^ metadata->ip_dst ^ metadata->src_p ^ metadata->dst_p ^ metadata->ip_protocol;
-			bpf_debug("(UDP) src:%u, dst:%u, payload:%d", metadata->src_p, metadata->dst_p, metadata->length);
+#ifdef DEBUG
+			// bpf_debug("(UDP) src:%u, dst:%u, payload:%d", metadata->src_p, metadata->dst_p, metadata->length);
+#endif
 		}
 	}
 	else if (iph->protocol == IPPROTO_TCP)
@@ -166,8 +242,10 @@ static __always_inline
 		struct tcphdr *tcph = h;
 		if (tcph + 1 > data_end)
 		{
-			bpf_debug("Invalid TCPv4 packet: L4off:%llu\n",
-					  sizeof(struct iphdr) + sizeof(struct tcphdr));
+#ifdef DEBUG
+			// bpf_debug("Invalid TCPv4 packet: L4off:%llu\n",
+					//   sizeof(struct iphdr) + sizeof(struct tcphdr));
+#endif
 		}
 		else
 		{
@@ -186,7 +264,9 @@ static __always_inline
 			metadata->fin = tcph->fin;
 			metadata->length = data_end - current;
 			metadata->key = metadata->ip_src ^ metadata->ip_dst ^ metadata->src_p ^ metadata->dst_p ^ metadata->ip_protocol;
-			bpf_debug("(TCP) src:%u, dst:%u, payload:%d", metadata->src_p, metadata->dst_p, metadata->length);
+#ifdef DEBUG
+			// bpf_debug("(TCP) src:%u, dst:%u, payload:%d", metadata->src_p, metadata->dst_p, metadata->length);
+#endif
 		}
 	}
 
@@ -202,7 +282,9 @@ static __always_inline void parse_ipv6(struct xdp_md *ctx, u64 l3_offset, struct
 	/* Hint: +1 is sizeof(struct iphdr) */
 	if (iph + 1 > data_end)
 	{
-		bpf_debug("Invalid IPv6 packet: L3off:%llu\n", l3_offset);
+#ifdef DEBUG
+		// bpf_debug("Invalid IPv6 packet: L3off:%llu\n", l3_offset);
+#endif
 		return;
 	}
 }
@@ -222,7 +304,9 @@ static __always_inline
 		parse_ipv6(ctx, l3_offset, &_ipv6hdr, metadata);
 		return 0;
 	default:
-		bpf_debug("Not handling eth_proto:0x%x\n", eth_proto);
+#ifdef DEBUG
+		// bpf_debug("Not handling eth_proto:0x%x\n", eth_proto);
+#endif
 		return XDP_PASS;
 	}
 	return XDP_PASS;
@@ -231,9 +315,16 @@ static __always_inline
 SEC("xdp_stats_kernel")
 int xdp_stats(struct xdp_md *ctx)
 {
-	bpf_debug("<-->\n");
+#ifdef DEBUG
+	// bpf_debug("<-->\n");
+#endif
 	void *data_end = (void *)(long)ctx->data_end;
 	void *data = (void *)(long)ctx->data;
+
+	// checksum_update(data, (data_end-data), (void *)0);
+	// get_checksum(&test1);
+
+	// bpf_debug("checksum => %u", ck);
 
 	struct ethhdr *eth = data;
 	struct packet_metadata metadata = {
@@ -265,8 +356,10 @@ int xdp_stats(struct xdp_md *ctx)
 
 	if (!(parse_eth(eth, data_end, &eth_proto, &l3_offset, &metadata)))
 	{
-		bpf_debug("Cannot parse L2: L3off:%llu proto:0x%x\n",
-				  l3_offset, eth_proto);
+#ifdef DEBUG
+		// bpf_debug("Cannot parse L2: L3off:%llu proto:0x%x\n",
+				//   l3_offset, eth_proto);
+#endif
 		return XDP_PASS;
 	}
 	//bpf_debug("Reached L3: L3off:%llu proto:0x%x\n", l3_offset, eth_proto);
@@ -311,6 +404,7 @@ int xdp_stats(struct xdp_md *ctx)
 
 			// now we add the flow
 			struct flows_info fi = {
+				.checksum = 0,
 				.totalPackets = 0,
 				.totalBytes = 0,
 				.totalRxBytes = 0,
@@ -323,19 +417,21 @@ int xdp_stats(struct xdp_md *ctx)
 				.totalRst = 0,
 				.totalSyn = 0,
 				.totalFin = 0};
-			bpf_map_update_elem(&xdp_flows, &metadata.key,&fi, BPF_ANY);
+			bpf_map_update_elem(&xdp_flows, &metadata.key, &fi, BPF_ANY);
 			flowsInfo = bpf_map_lookup_elem(&xdp_flows, &metadata.key);
 		}
 
 		// // by here, we should have a valid flow info
 		if (flowsInfo)
 		{
+			//flowsInfo->checksum = checksum_update(data, (data_end-data), &flowsInfo->checksum);
 			lock_xadd(&flowsInfo->totalPackets, 1);
 			lock_xadd(&flowsInfo->totalBytes, metadata.length);
 
-			if(eth_proto == ETH_P_IP){ 
+			if (eth_proto == ETH_P_IP)
+			{
 				lock_xadd(&flowsInfo->totalTtl, metadata.ip_ttl);
-			}	
+			}
 
 			if (metadata.ip_protocol == IPPROTO_TCP)
 			{
@@ -347,12 +443,14 @@ int xdp_stats(struct xdp_md *ctx)
 				lock_xadd(&flowsInfo->totalSyn, metadata.syn);
 				lock_xadd(&flowsInfo->totalFin, metadata.fin);
 			}
-			bpf_debug("key: %u, total flows %llu, totalPackets: %llu\n", metadata.key, keysCount->total_keys, flowsInfo->totalPackets);
-			bpf_debug("totalBytes: %llu\n", flowsInfo->totalBytes);
+#ifdef DEBUG
+			// bpf_debug("key: %u, total flows %llu, totalPackets: %llu\n", metadata.key, keysCount->total_keys, flowsInfo->totalPackets);
+			// bpf_debug("totalBytes: %llu\n", flowsInfo->totalBytes);
+#endif
 		}
 	}
 
-		return XDP_PASS;
+	return XDP_PASS;
 }
 
 char _license[] SEC("license") = "GPL";

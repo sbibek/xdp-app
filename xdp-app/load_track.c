@@ -230,11 +230,11 @@ void process(struct flow_key_info *fki, struct flows_info *history, struct flows
 	double rstRate = __diffu64Adjusted(current->totalRst , history->totalRst)/period;
 	double finRate = __diffu64Adjusted(current->totalFin , history->totalFin)/period;
 	if(Mbitps < 1024) {
-		printf("%u <-> %u (%llu packets) (%llu bytes) %f million pps(*), %f Mbits/sec(**), %f seconds\n synrate: %f, ackrate: %f, pshrate: %f, rstrate: %f, finrate: %f\n", fki->src_p, fki->dst_p, history->totalPackets, history->totalBytes, pps, Mbitps, period,
-	synRate, ackRate, pshRate, rstRate, finRate);
+		printf("%u <-> %u (%llu packets) (%llu bytes) %f million pps(*), %f Mbits/sec(**), %f seconds\n synrate: %f, ackrate: %f, pshrate: %f, rstrate: %f, finrate: %f chksum: %u\n", fki->src_p, fki->dst_p, history->totalPackets, history->totalBytes, pps, Mbitps, period,
+	synRate, ackRate, pshRate, rstRate, finRate, ~current->checksum);
 	} else {
-		printf("%u <-> %u (%llu packets) (%llu bytes) %f million pps(*), %f Gbits/sec(**), %f seconds\n synrate: %f, ackrate: %f, pshrate: %f, rstrate: %f, finrate: %f\n", fki->src_p, fki->dst_p, history->totalPackets, history->totalBytes, pps, Mbitps/1024, period,
-	synRate, ackRate, pshRate, rstRate, finRate);
+		printf("%u <-> %u (%llu packets) (%llu bytes) %f million pps(*), %f Gbits/sec(**), %f seconds\n synrate: %f, ackrate: %f, pshrate: %f, rstrate: %f, finrate: %f, chksum: %u\n", fki->src_p, fki->dst_p, history->totalPackets, history->totalBytes, pps, Mbitps/1024, period,
+	synRate, ackRate, pshRate, rstRate, finRate, ~current->checksum);
 
 	}
 }
