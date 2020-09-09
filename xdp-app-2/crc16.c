@@ -1,6 +1,21 @@
 #include<stdio.h>
 #include<stdint.h>
-#include<stdbool.h>
+// #include<stdbool.h>
+// #include "common_kern_user.h"
+
+#include <linux/bpf.h>
+#include "common_kern_user.h"
+#include <linux/if_ether.h>
+#include <linux/if_packet.h>
+#include <linux/if_vlan.h>
+#include <linux/ip.h>
+#include <linux/ipv6.h>
+#include <linux/in.h>
+#include <linux/tcp.h>
+#include <linux/udp.h>
+#include <stdbool.h>
+
+
 
 #define		CRC_START_16		0x0000
 #define		CRC_POLY_16		0xA001
@@ -106,15 +121,17 @@ static inline unsigned short _checksum(unsigned char *buf, int bufsz) {
 
 
 int main(){
-    void *test1 = "1";
-    void *test2 = "2";
-    void *test3 = "3";
-    void *test4 = "4";
-    void *test5 = "123";
-    unsigned long _t = checksum(test1, 1, ((void *)0)) ;
-     _t = checksum(test2, 1, &_t) ;
- _t = checksum(test3, 1, &_t) ;
-    unsigned short t = ~_t;
-    printf("%u, %u\n", t, _checksum(test5,3));
+//     void *test1 = "1";
+//     void *test2 = "2";
+//     void *test3 = "3";
+//     void *test4 = "4";
+//     void *test5 = "123";
+//     unsigned long _t = checksum(test1, 1, ((void *)0)) ;
+//      _t = checksum(test2, 1, &_t) ;
+//  _t = checksum(test3, 1, &_t) ;
+//     unsigned short t = ~_t;
+//     printf("%u, %u\n", t, _checksum(test5,3));
+
+    printf("%ld", sizeof(struct flows_info));
     return 0;
 }

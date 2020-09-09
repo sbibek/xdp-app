@@ -15,30 +15,35 @@ struct datarec
 struct packet_metadata
 {
 	__u32 key;
-	__u16 ethernet_protocol;
 	__u32 ip_src;
+	__be32 length; // payload length
 	__u32 ip_dst;
+	__be32 acknowledge; //TCP
+	__be32 sequence; //TCP
+
+
+
+
+	__u16 ethernet_protocol;
+	__be16 src_p;
+	__be16 dst_p;
+
+
+	/* this is populated if TCP Only */
+	__be16 window;
+	__be16 urg_ptr;
+	__u16 cwr;
+	__u16 ece;
+	__u16	urg;
+	__u16	ack;
+	__u16	psh;
+	__u16	rst;
+	__u16	syn;
+	__u16	fin;
+
 	__u8 ip_ttl;
 	__u8 ip_protocol;
 
-	/* populated for both TCP and UDP */
-	__be16 src_p;
-	__be16 dst_p;
-	__be32 length; // payload length
-
-	/* this is populated if TCP Only */
-	__be32 acknowledge;
-	__be32 sequence;
-	__be16 window;
-	__be16 urg_ptr;
-	__u16 cwr,
-		ece,
-		urg,
-		ack,
-		psh,
-		rst,
-		syn,
-		fin;
 };
 
 struct total_keys {
@@ -53,11 +58,12 @@ struct flow_key_info
 	__be16 src_p;
 	__be16 dst_p;
 	__u8 ip_protocol;
+	
+	char padding[3];
 };
 
 struct flows_info {
 	__u64 timestamp;
-	unsigned long checksum;
 	__u64 totalPackets,
 			totalBytes,
 			totalRxBytes,
@@ -70,6 +76,8 @@ struct flows_info {
 			totalRst,
 			totalSyn,
 			totalFin;
+
+	unsigned long checksum;
 };
 
 #ifndef XDP_ACTION_MAX
