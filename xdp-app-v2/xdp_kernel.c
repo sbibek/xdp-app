@@ -24,6 +24,8 @@ typedef __u64 u64;
 
 #define DEBUG
 
+//#define PER_CPU
+
 #ifdef DEBUG
 /* logs in/sys/kernel/debug/tracing/trace_pipe
  */
@@ -42,36 +44,55 @@ struct vlan_hdr
 };
 
 struct bpf_map_def SEC("maps") xdp_stats_map = {
+#ifdef PER_CPU
+	.type = BPF_MAP_TYPE_PERCPU_ARRAY,
+#else
 	.type = BPF_MAP_TYPE_ARRAY,
+#endif
 	.key_size = sizeof(__u32),
 	.value_size = sizeof(struct datarec),
 	.max_entries = XDP_ACTION_MAX,
-
 };
 
 struct bpf_map_def SEC("maps") xdp_total_keys = {
+#ifdef PER_CPU
+	.type = BPF_MAP_TYPE_PERCPU_HASH,
+#else
 	.type = BPF_MAP_TYPE_HASH,
+#endif
 	.key_size = sizeof(__u32),
 	.value_size = sizeof(struct total_keys),
 	.max_entries = MAX_ENTRIES_TOTAL_KEYS,
 };
 
 struct bpf_map_def SEC("maps") xdp_flow_keys = {
+#ifdef PER_CPU
+	.type = BPF_MAP_TYPE_PERCPU_ARRAY,
+#else
 	.type = BPF_MAP_TYPE_ARRAY,
+#endif
 	.key_size = sizeof(__u32),
 	.value_size = sizeof(struct flow_key_info),
 	.max_entries = MAX_ENTRIES_FLOW_KEYS,
 };
 
 struct bpf_map_def SEC("maps") xdp_flows = {
+#ifdef PER_CPU
+	.type = BPF_MAP_TYPE_PERCPU_HASH,
+#else
 	.type = BPF_MAP_TYPE_HASH,
+#endif
 	.key_size = sizeof(__u32),
 	.value_size = sizeof(struct flows_info),
 	.max_entries = MAX_ENTRIES_FLOWS,
 };
 
 struct bpf_map_def SEC("maps") xdp_flows_history = {
+#ifdef PER_CPU
+	.type = BPF_MAP_TYPE_PERCPU_HASH,
+#else
 	.type = BPF_MAP_TYPE_HASH,
+#endif
 	.key_size = sizeof(__u32),
 	.value_size = sizeof(struct flows_info),
 	.max_entries = MAX_ENTRIES_FLOWS,
@@ -221,7 +242,11 @@ static __always_inline void update_maps(struct packet_metadata *metadata, u16 et
 				.ip_protocol = metadata->ip_protocol,
 			};
 			bpf_map_update_elem(&xdp_flow_keys, &keysCount->total_keys, &flowKeyInfo, BPF_ANY);
+#ifdef PER_CPU
+			keysCount->total_keys++;
+#else
 			lock_xadd(&keysCount->total_keys, 1);
+#endif
 
 			// now we add the flow
 			struct flows_info fi = {
@@ -244,6 +269,27 @@ static __always_inline void update_maps(struct packet_metadata *metadata, u16 et
 
 		if (flowsInfo)
 		{
+#ifdef PER_CPU
+			// now we have the flows info so just update them
+			flowsInfo->totalPackets++;
+			flowsInfo->totalBytes += metadata->length;
+
+			if (eth_proto == ETH_P_IP)
+			{
+				flowsInfo->totalTtl += metadata->ip_ttl;
+			}
+
+			if (metadata->ip_protocol == IPPROTO_TCP)
+			{
+				flowsInfo->totalEce += metadata->ece;
+				flowsInfo->totalUrg += metadata->urg;
+				flowsInfo->totalAck += metadata->ack;
+				flowsInfo->totalPsh += metadata->psh;
+				flowsInfo->totalRst += metadata->rst;
+				flowsInfo->totalSyn += metadata->syn;
+				flowsInfo->totalFin += metadata->fin;
+			}
+#else
 			// now we have the flows info so just update them
 			lock_xadd(&flowsInfo->totalPackets, 1);
 			lock_xadd(&flowsInfo->totalBytes, metadata->length);
@@ -263,6 +309,7 @@ static __always_inline void update_maps(struct packet_metadata *metadata, u16 et
 				lock_xadd(&flowsInfo->totalSyn, metadata->syn);
 				lock_xadd(&flowsInfo->totalFin, metadata->fin);
 			}
+#endif
 		}
 	}
 }
