@@ -22,7 +22,7 @@ typedef __u64 u64;
 #define lock_xadd(ptr, val) ((void)__sync_fetch_and_add(ptr, val))
 #endif
 
-// #define DEBUG
+#define DEBUG
 
 #ifdef DEBUG
 /* logs in /sys/kernel/debug/tracing/trace_pipe
@@ -77,6 +77,44 @@ struct bpf_map_def SEC("maps") xdp_flows_history = {
 	.max_entries = MAX_ENTRIES_FLOWS,
 };
 
+static __always_inline
+void checksum(struct xdp_md *ctx, __u32 *offset, __u32 *val)
+{
+	void *data_end = (void *)(long)ctx->data_end;
+	void *data = (void *)(long)ctx->data;
+
+	// if (data + *offset > data_end)
+	// {
+	// 	*val = 0;
+	// 	return;
+	// }
+
+	// // else
+	// __u32 sum = 0;
+
+	// for (int i = 0; i < 1500; i++)
+	// {
+	// 	if (data + *offset < data_end)
+	// 	{
+	// 		sum += *((__u8 *)data + *offset);
+	// 		++(*offset);
+	// 	}
+	// }
+
+	// // because the offset will not increase as soon as it is equal to the data_end
+	// // so adding the last value
+	// sum += *((__u8 *)data + *offset);
+
+	// *val = sum;
+	__u8 *current = data;
+	if (current + *offset > data_end){
+		*val = 0;
+		return;
+	} else {
+		*val = *(current + *offset);
+	}
+}
+
 SEC("xdp_stats_kernel")
 int xdp_stats(struct xdp_md *ctx)
 {
@@ -90,7 +128,7 @@ int xdp_stats(struct xdp_md *ctx)
 	struct iphdr *ipv4hdr;
 	struct tcphdr *tcphdr;
 	struct udphdr *udphdr;
-	 
+	__u32 payload_checksum;
 
 	/** START of ETH HEADER parsing **/
 
@@ -131,39 +169,51 @@ int xdp_stats(struct xdp_md *ctx)
 #endif
 
 	/* START of IP parsing */
-	if(eth_type == ETH_P_IP) {
+	if (eth_type == ETH_P_IP)
+	{
 		// means this is a IP header
 		ipv4hdr = data + offset;
-		// now we need to check the data bounds 
-		if(ipv4hdr + 1 > data_end) return XDP_PASS;
+		// now we need to check the data bounds
+		if (ipv4hdr + 1 > data_end)
+			return XDP_PASS;
 
 		// now we update the offset
 		offset += sizeof(struct iphdr);
 
 #ifdef DEBUG
-	bpf_debug("ip-proto:%u\n", ipv4hdr->protocol);
+		bpf_debug("ip-proto:%u\n", ipv4hdr->protocol);
 #endif
 
-	if(ipv4hdr->protocol == IPPROTO_TCP) {
-		// so this is a TCP packet
-		tcphdr = data + offset;
-		// now we check the data bounds
-		if(tcphdr + 1 > data_end) return XDP_PASS;
-		// now we update the offset
-		offset += sizeof(struct tcphdr);
+		if (ipv4hdr->protocol == IPPROTO_TCP)
+		{
+			// so this is a TCP packet
+			tcphdr = data + offset;
+			// now we check the data bounds
+			if (tcphdr + 1 > data_end)
+				return XDP_PASS;
+			// now we update the offset
+			offset += sizeof(struct tcphdr);
+			checksum(ctx, &offset, &payload_checksum);
+#ifdef DEBUG
+			bpf_debug("payload-checksum:%u\n", payload_checksum);
+#endif
+		}
+		else if (ipv4hdr->protocol == IPPROTO_UDP)
+		{
+			// this is a UDP packet
+			udphdr = data + offset;
+			// now we make the data bounds check
+			if (udphdr + 1 > data_end)
+				return XDP_PASS;
+			// now we update the offset
+			offset += sizeof(struct udphdr);
+			checksum(ctx, &offset, &payload_checksum);
+		}
 
-	} else if(ipv4hdr->protocol == IPPROTO_UDP) {
-		// this is a UDP packet
-		udphdr = data + offset;
-		// now we make the data bounds check
-		if(udphdr + 1 > data_end) return XDP_PASS;
-		// now we update the offset
-		offset += sizeof(struct udphdr);
+		/** END of IP parsing **/
 	}
-
-	/** END of IP parsing **/
-
-	}	else {
+	else
+	{
 		// we just pass for now for IPV6 or other unknown protocol
 		return XDP_PASS;
 	}
