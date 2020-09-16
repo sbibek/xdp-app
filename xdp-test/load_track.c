@@ -456,57 +456,57 @@ int main(int argc, char **argv)
 			   cfg.ifname, cfg.ifindex);
 	}
 
-	stats_map_fd = find_map_fd(bpf_obj, "xdp_stats_map");
-	totalKeysFd = find_map_fd(bpf_obj, "xdp_total_keys");
-	flowKeysFd = find_map_fd(bpf_obj, "xdp_flow_keys");
-	flowsFd = find_map_fd(bpf_obj, "xdp_flows");
-	flowsBackupFd = find_map_fd(bpf_obj, "xdp_flows_history");
+	printf("***attached****");
 
-	// detach and return if any of the maps are not found;
-	if (stats_map_fd < 0 || totalKeysFd < 0 || flowKeysFd < 0 || flowsFd < 0 || flowsBackupFd < 0)
-	{
-		xdp_link_detach(cfg.ifindex, cfg.xdp_flags, 0);
-		return EXIT_FAIL_BPF;
-	}
+	// stats_map_fd = find_map_fd(bpf_obj, "xdp_stats_map");
+	// totalKeysFd = find_map_fd(bpf_obj, "xdp_total_keys");
+	// flowKeysFd = find_map_fd(bpf_obj, "xdp_flow_keys");
+	// flowsFd = find_map_fd(bpf_obj, "xdp_flows");
+	// flowsBackupFd = find_map_fd(bpf_obj, "xdp_flows_history");
 
-	map_expect.key_size = sizeof(__u32);
-	map_expect.value_size = sizeof(struct datarec);
-	map_expect.max_entries = XDP_ACTION_MAX;
+	// // detach and return if any of the maps are not found;
+	// if (stats_map_fd < 0 || totalKeysFd < 0 || flowKeysFd < 0 || flowsFd < 0 || flowsBackupFd < 0)
+	// {
+	// 	xdp_link_detach(cfg.ifindex, cfg.xdp_flags, 0);
+	// 	return EXIT_FAIL_BPF;
+	// }
 
-	map_expect_totalkeys.key_size = sizeof(__u32);
-	map_expect_totalkeys.value_size = sizeof(struct total_keys);
-	map_expect_totalkeys.max_entries = MAX_ENTRIES_TOTAL_KEYS;
+	// map_expect.key_size = sizeof(__u32);
+	// map_expect.value_size = sizeof(struct datarec);
+	// map_expect.max_entries = XDP_ACTION_MAX;
 
-	map_expect_flowskeys.key_size = sizeof(__u32);
-	map_expect_flowskeys.value_size = sizeof(struct flow_key_info);
-	map_expect_flowskeys.max_entries = MAX_ENTRIES_FLOW_KEYS;
+	// map_expect_totalkeys.key_size = sizeof(__u32);
+	// map_expect_totalkeys.value_size = sizeof(struct total_keys);
+	// map_expect_totalkeys.max_entries = MAX_ENTRIES_TOTAL_KEYS;
 
-	map_expect_flows.key_size = sizeof(__u32);
-	map_expect_flows.value_size = sizeof(struct flows_info);
-	map_expect_flows.max_entries = MAX_ENTRIES_FLOWS;
+	// map_expect_flowskeys.key_size = sizeof(__u32);
+	// map_expect_flowskeys.value_size = sizeof(struct flow_key_info);
+	// map_expect_flowskeys.max_entries = MAX_ENTRIES_FLOW_KEYS;
 
-	err = __check_map_fd_info(stats_map_fd, &info, &map_expect);
-	if (err ||
-		__check_map_fd_info(totalKeysFd, &totalkeysinfo, &map_expect_totalkeys) ||
-		__check_map_fd_info(flowKeysFd, &flowkeysinfo, &map_expect_flowskeys) ||
-		__check_map_fd_info(flowsFd, &flowsinfo, &map_expect_flows) ||
-		__check_map_fd_info(flowsBackupFd, &flowsbackupinfo, &map_expect_flows))
-	{
-		fprintf(stderr, "ERR: map via FD not compatible\n");
-		return err;
-	}
-	if (verbose)
-	{
-		printf("\nCollecting stats from BPF map\n");
-		printf(" - BPF map (bpf_map_type:%d) id:%d name:%s"
-			   " key_size:%d value_size:%d max_entries:%d\n",
-			   info.type, info.id, info.name,
-			   info.key_size, info.value_size, info.max_entries);
-	}
+	// map_expect_flows.key_size = sizeof(__u32);
+	// map_expect_flows.value_size = sizeof(struct flows_info);
+	// map_expect_flows.max_entries = MAX_ENTRIES_FLOWS;
 
-	printf("\n######################### ATTACHED ##############\n");
+	// err = __check_map_fd_info(stats_map_fd, &info, &map_expect);
+	// if (err ||
+	// 	__check_map_fd_info(totalKeysFd, &totalkeysinfo, &map_expect_totalkeys) ||
+	// 	__check_map_fd_info(flowKeysFd, &flowkeysinfo, &map_expect_flowskeys) ||
+	// 	__check_map_fd_info(flowsFd, &flowsinfo, &map_expect_flows) ||
+	// 	__check_map_fd_info(flowsBackupFd, &flowsbackupinfo, &map_expect_flows))
+	// {
+	// 	fprintf(stderr, "ERR: map via FD not compatible\n");
+	// 	return err;
+	// }
+	// if (verbose)
+	// {
+	// 	printf("\nCollecting stats from BPF map\n");
+	// 	printf(" - BPF map (bpf_map_type:%d) id:%d name:%s"
+	// 		   " key_size:%d value_size:%d max_entries:%d\n",
+	// 		   info.type, info.id, info.name,
+	// 		   info.key_size, info.value_size, info.max_entries);
+	// }
 
 	// stats_poll(stats_map_fd, info.type, interval);
-	__poll(totalKeysFd, flowKeysFd, flowsFd, flowsBackupFd, interval);
+	// __poll(totalKeysFd, flowKeysFd, flowsFd, flowsBackupFd, interval);
 	return EXIT_OK;
 }

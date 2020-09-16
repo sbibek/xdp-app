@@ -6,15 +6,6 @@
 #define MAX_ENTRIES_FLOW_KEYS 10000
 #define MAX_ENTRIES_FLOWS 10000
 
-
-#define PER_CPU
-
-struct vlan_hdr
-{
-	__be16 h_vlan_TCI;
-	__be16 h_vlan_encapsulated_proto;
-};
-
 struct datarec
 {
 	__u64 rx_packets;
@@ -29,7 +20,6 @@ struct packet_metadata
 	__u32 ip_dst;
 	__be32 acknowledge; //TCP
 	__be32 sequence; //TCP
-	__u32 payload_checksum;
 
 
 

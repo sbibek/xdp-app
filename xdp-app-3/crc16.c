@@ -16,6 +16,7 @@
 #include <stdbool.h>
 
 
+
 #define		CRC_START_16		0x0000
 #define		CRC_POLY_16		0xA001
 
@@ -131,6 +132,6 @@ int main(){
 //     unsigned short t = ~_t;
 //     printf("%u, %u\n", t, _checksum(test5,3));
 
-    printf("%ld", sizeof(struct flow_key_info));
+    printf("%ld", sizeof(struct flows_info));
     return 0;
 }

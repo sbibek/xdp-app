@@ -23,8 +23,7 @@ typedef __u64 u64;
 #endif
 
 #define DEBUG
-
-//#define PER_CPU
+// #define TEST
 
 #ifdef DEBUG
 /* logs in/sys/kernel/debug/tracing/trace_pipe
@@ -37,14 +36,8 @@ typedef __u64 u64;
 	})
 #endif
 
-struct vlan_hdr
-{
-	__be16 h_vlan_TCI;
-	__be16 h_vlan_encapsulated_proto;
-};
-
 struct bpf_map_def SEC("maps") xdp_stats_map = {
-#ifdef PER_CPU
+#ifndef PER_CPU
 	.type = BPF_MAP_TYPE_PERCPU_ARRAY,
 #else
 	.type = BPF_MAP_TYPE_ARRAY,
@@ -55,7 +48,7 @@ struct bpf_map_def SEC("maps") xdp_stats_map = {
 };
 
 struct bpf_map_def SEC("maps") xdp_total_keys = {
-#ifdef PER_CPU
+#ifndef PER_CPU
 	.type = BPF_MAP_TYPE_PERCPU_HASH,
 #else
 	.type = BPF_MAP_TYPE_HASH,
@@ -66,7 +59,7 @@ struct bpf_map_def SEC("maps") xdp_total_keys = {
 };
 
 struct bpf_map_def SEC("maps") xdp_flow_keys = {
-#ifdef PER_CPU
+#ifndef PER_CPU
 	.type = BPF_MAP_TYPE_PERCPU_ARRAY,
 #else
 	.type = BPF_MAP_TYPE_ARRAY,
@@ -77,7 +70,7 @@ struct bpf_map_def SEC("maps") xdp_flow_keys = {
 };
 
 struct bpf_map_def SEC("maps") xdp_flows = {
-#ifdef PER_CPU
+#ifndef PER_CPU
 	.type = BPF_MAP_TYPE_PERCPU_HASH,
 #else
 	.type = BPF_MAP_TYPE_HASH,
@@ -88,7 +81,7 @@ struct bpf_map_def SEC("maps") xdp_flows = {
 };
 
 struct bpf_map_def SEC("maps") xdp_flows_history = {
-#ifdef PER_CPU
+#ifndef PER_CPU
 	.type = BPF_MAP_TYPE_PERCPU_HASH,
 #else
 	.type = BPF_MAP_TYPE_HASH,
@@ -98,6 +91,97 @@ struct bpf_map_def SEC("maps") xdp_flows_history = {
 	.max_entries = MAX_ENTRIES_FLOWS,
 };
 
+// static __always_inline
+// unsigned long checksum_update(unsigned char *buf, unsigned char *buffer_end, int bufsz, unsigned long *prev_checksum) {
+//     unsigned long sum = 0;
+
+//     if(prev_checksum) {
+//         sum = (*prev_checksum);
+//     }
+
+//     // while (bufsz > 0) {
+// 	// 	if(buf <= buffer_end) {
+//     //     sum += *buf;
+//     //     buf++;
+//     //     sum = (sum & 0xffff) + (sum >> 16);
+//     //     sum = (sum & 0xffff) + (sum >> 16);
+// 	// 	}
+//     //     bufsz -= 1;
+//     // }
+// 	int i = 0;
+// 	#pragma clang loop unroll(full)
+// 	for(i=0;i<750;i++){
+// 		if(buf+i <= buffer_end) {
+// 			// means this is safe access
+// 			sum += i;
+// 		}
+// 	}
+
+//     return sum;
+// }
+
+// static __always_inline unsigned short checksum(unsigned short *buf, int bufsz) {
+//     unsigned long sum = 0;
+
+//     while (bufsz > 1) {
+//         sum += *buf;
+//         buf++;
+//         bufsz -= 2;
+//     }
+
+//     if (bufsz == 1) {
+//         sum += *(unsigned char *)buf;
+//     }
+
+//     sum = (sum & 0xffff) + (sum >> 16);
+//     sum = (sum & 0xffff) + (sum >> 16);
+
+//     return ~sum;
+// }
+
+// static __always_inline __u32 sum16(void *data, void *data_end, __u8 len)
+// {
+// 	__u8 *addr = data;
+
+// 	__u32 sum = 0;
+// 	int i;
+
+// #pragma clang loop unroll(full)
+// 	for (i = 0; i < 1500; i++)
+// 	{
+// 		if(addr < data_end) {
+// 			sum += *addr;
+// 			++addr;
+// 		}
+// 	}
+
+// 	return sum;
+// }
+
+static __always_inline __u32 sum16(void *data, void *data_end)
+{
+	if (data < data_end)
+	{
+		__u8 *current = data;
+		__u32 sum = 0;
+
+		int i;
+		for (i = 1; i < 1500; i++)
+		{
+			sum += *(current+i);
+
+			if (current +i >= data_end)
+				break;
+		}
+		return sum;
+	}
+	else
+	{
+		return 0;
+	}
+}
+
+#ifndef TEST
 static __always_inline
 	u32
 	parse_ipv4(struct xdp_md *ctx, u64 l3_offset, struct iphdr *iph, struct packet_metadata *metadata)
@@ -127,6 +211,8 @@ static __always_inline
 			metadata->dst_p = bpf_htons(udph->dest);
 			metadata->length = data_end - current;
 			metadata->key = metadata->ip_src ^ metadata->ip_dst ^ metadata->src_p ^ metadata->dst_p ^ metadata->ip_protocol;
+			// if(current < data_end)
+			metadata->payload_checksum = sum16(current, data_end);
 		}
 	}
 	else if (iph->protocol == IPPROTO_TCP)
@@ -149,6 +235,8 @@ static __always_inline
 			metadata->fin = tcph->fin;
 			metadata->length = data_end - current;
 			metadata->key = metadata->ip_src ^ metadata->ip_dst ^ metadata->src_p ^ metadata->dst_p ^ metadata->ip_protocol;
+			// if(current < data_end)
+			metadata->payload_checksum = sum16(current, data_end);
 		}
 	}
 
@@ -210,7 +298,7 @@ static __always_inline
 	return XDP_PASS;
 }
 
-static __always_inline void update_maps(struct packet_metadata *metadata, u16 eth_proto)
+static __always_inline void update_maps(struct packet_metadata *metadata, u16 eth_proto, void *data, void *data_end)
 {
 	__u32 totalKeys = TOTAL_KEYS;
 	struct total_keys *keysCount = bpf_map_lookup_elem(&xdp_total_keys, &totalKeys);
@@ -228,9 +316,7 @@ static __always_inline void update_maps(struct packet_metadata *metadata, u16 et
 
 	if (keysCount)
 	{
-		// now we are sure that we have the total keys
 		struct flows_info *flowsInfo = bpf_map_lookup_elem(&xdp_flows, &metadata->key);
-
 		if (!flowsInfo)
 		{
 			struct flow_key_info flowKeyInfo = {
@@ -242,77 +328,30 @@ static __always_inline void update_maps(struct packet_metadata *metadata, u16 et
 				.ip_protocol = metadata->ip_protocol,
 			};
 			bpf_map_update_elem(&xdp_flow_keys, &keysCount->total_keys, &flowKeyInfo, BPF_ANY);
-#ifdef PER_CPU
-			keysCount->total_keys++;
-#else
-			lock_xadd(&keysCount->total_keys, 1);
-#endif
+			// lock_xadd(&keysCount->total_keys, 1);
 
-			// now we add the flow
-			struct flows_info fi = {
-				.checksum = 0,
-				.totalPackets = 0,
-				.totalBytes = 0,
-				.totalRxBytes = 0,
-				.totalTxBytes = 0,
-				.totalTtl = 0,
-				.totalEce = 0,
-				.totalUrg = 0,
-				.totalAck = 0,
-				.totalPsh = 0,
-				.totalRst = 0,
-				.totalSyn = 0,
-				.totalFin = 0};
-			bpf_map_update_elem(&xdp_flows, &metadata->key, &fi, BPF_ANY);
-			flowsInfo = bpf_map_lookup_elem(&xdp_flows, &metadata->key);
+			// // now we add the flow
+			// struct flows_info fi = {
+			// 	.checksum = 0,
+			// 	.totalPackets = 0,
+			// 	.totalBytes = 0,
+			// 	.totalRxBytes = 0,
+			// 	.totalTxBytes = 0,
+			// 	.totalTtl = 0,
+			// 	.totalEce = 0,
+			// 	.totalUrg = 0,
+			// 	.totalAck = 0,
+			// 	.totalPsh = 0,
+			// 	.totalRst = 0,
+			// 	.totalSyn = 0,
+			// 	.totalFin = 0};
+			// bpf_map_update_elem(&xdp_flows, &metadata->key, &fi, BPF_ANY);
+			// flowsInfo = bpf_map_lookup_elem(&xdp_flows, &metadata->key);
 		}
-
-		if (flowsInfo)
-		{
-#ifdef PER_CPU
-			// now we have the flows info so just update them
-			flowsInfo->totalPackets++;
-			flowsInfo->totalBytes += metadata->length;
-
-			if (eth_proto == ETH_P_IP)
-			{
-				flowsInfo->totalTtl += metadata->ip_ttl;
-			}
-
-			if (metadata->ip_protocol == IPPROTO_TCP)
-			{
-				flowsInfo->totalEce += metadata->ece;
-				flowsInfo->totalUrg += metadata->urg;
-				flowsInfo->totalAck += metadata->ack;
-				flowsInfo->totalPsh += metadata->psh;
-				flowsInfo->totalRst += metadata->rst;
-				flowsInfo->totalSyn += metadata->syn;
-				flowsInfo->totalFin += metadata->fin;
-			}
-#else
-			// now we have the flows info so just update them
-			lock_xadd(&flowsInfo->totalPackets, 1);
-			lock_xadd(&flowsInfo->totalBytes, metadata->length);
-
-			if (eth_proto == ETH_P_IP)
-			{
-				lock_xadd(&flowsInfo->totalTtl, metadata->ip_ttl);
-			}
-
-			if (metadata->ip_protocol == IPPROTO_TCP)
-			{
-				lock_xadd(&flowsInfo->totalEce, metadata->ece);
-				lock_xadd(&flowsInfo->totalUrg, metadata->urg);
-				lock_xadd(&flowsInfo->totalAck, metadata->ack);
-				lock_xadd(&flowsInfo->totalPsh, metadata->psh);
-				lock_xadd(&flowsInfo->totalRst, metadata->rst);
-				lock_xadd(&flowsInfo->totalSyn, metadata->syn);
-				lock_xadd(&flowsInfo->totalFin, metadata->fin);
-			}
-#endif
-		}
+	
 	}
 }
+#endif
 
 SEC("xdp_stats_kernel")
 int xdp_stats(struct xdp_md *ctx)
@@ -320,7 +359,7 @@ int xdp_stats(struct xdp_md *ctx)
 	// get the start and end of the packet
 	void *data_end = (void *)(long)ctx->data_end;
 	void *data = (void *)(long)ctx->data;
-
+	
 	struct ethhdr *eth = data;
 	struct packet_metadata metadata = {
 		.key = 0,
@@ -344,8 +383,11 @@ int xdp_stats(struct xdp_md *ctx)
 		.rst = 0,
 		.syn = 0,
 		.fin = 0,
+		.payload_checksum = 0
 	};
 
+
+#ifndef TEST
 	u16 eth_proto = 0;
 	u64 l3_offset = 0;
 
@@ -356,9 +398,9 @@ int xdp_stats(struct xdp_md *ctx)
 
 	//else handle the protocol and populate the metadata information
 	handle_eth_protocol(ctx, eth_proto, l3_offset, &metadata);
-
 	// finally update the maps
-	update_maps(&metadata, eth_proto);
+	update_maps(&metadata, eth_proto, data, data_end);
+#endif
 
 	return XDP_PASS;
 }

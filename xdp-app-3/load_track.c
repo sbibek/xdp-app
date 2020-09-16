@@ -504,8 +504,6 @@ int main(int argc, char **argv)
 			   info.key_size, info.value_size, info.max_entries);
 	}
 
-	printf("\n######################### ATTACHED ##############\n");
-
 	// stats_poll(stats_map_fd, info.type, interval);
 	__poll(totalKeysFd, flowKeysFd, flowsFd, flowsBackupFd, interval);
 	return EXIT_OK;

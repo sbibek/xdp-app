@@ -1,6 +1,5 @@
 
 #include <stdio.h> 
-#include <net/checksum.h>
   
 // Alignment requirements 
 // (typical 32 bit machine) 
