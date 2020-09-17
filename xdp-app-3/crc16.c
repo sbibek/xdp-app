@@ -146,16 +146,23 @@ int main(){
 
     // return 0;
 
-    void *test = "1234";
-    __u8 *current = test;
-    void *end = current + 4;
-    // printf("%lu", end-current);
+    // void *test = "1234";
+    // __u8 *current = test;
+    // void *end = current + 4;
+    // // printf("%lu", end-current);
 
-    struct test *t = (void *)current;
+    // struct test *t = (void *)current;
 
 
-    printf("%u", *(__u8 *)end);
-   
+    // printf("%u", *(__u8 *)end);
+    __u32 sum = 9972865;
+     while (sum>>16){
+           sum = (sum & 0xffff) + (sum >> 16); 
+printf("here\n ");
+     }
+
+     __u16 f= ~sum;
+         printf("%d\n", f);
     // for(int i=0;i<4;i++){
     //     printf("%d => %u\n",i, *current);
     //     ++current;

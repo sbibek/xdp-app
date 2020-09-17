@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 static const char *__doc__ = "XDP loader and stats program\n"
-	" - Allows selecting BPF section --progsec name to XDP-attach to --dev\n";
+							 " - Allows selecting BPF section --progsec name to XDP-attach to --dev\n";
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -122,7 +122,8 @@ static double calc_period(struct record *r, struct record *p)
 	return period_;
 }
 
-static double claculate_period(__u64 t1, __u64 t2) {
+static double claculate_period(__u64 t1, __u64 t2)
+{
 	double period_ = 0;
 	__u64 period = 0;
 
@@ -176,24 +177,29 @@ void map_get_value_array(int fd, __u32 key, struct datarec *value)
 	}
 }
 
-void map_get_total_keys(int fd, struct total_keys *value) {
+void map_get_total_keys(int fd, struct total_keys *value)
+{
 	__u32 key = TOTAL_KEYS;
 
 	if ((bpf_map_lookup_elem(fd, &key, value)) != 0)
 	{
-		// the lookup will fail for no keys at all	
-		// so lets just return the 0 valued 
+		// the lookup will fail for no keys at all
+		// so lets just return the 0 valued
 		struct total_keys tk = {.total_keys = 0};
 		value = &tk;
 	}
 }
 
-void update_flow_history(int fd, struct flow_key_info *fki, struct flows_info *info){
+void update_flow_history(int fd, struct flow_key_info *fki, struct flows_info *info)
+{
 	struct flows_info fi = {0};
-	if ((bpf_map_lookup_elem(fd, &fki->key, &fi)) != 0){
+	if ((bpf_map_lookup_elem(fd, &fki->key, &fi)) != 0)
+	{
 		// this means we have to create a new entry
 		bpf_map_update_elem(fd, &fki->key, info, BPF_ANY);
-	} else {
+	}
+	else
+	{
 		// we already have it means we just need to update it
 		fi.timestamp = info->timestamp;
 		fi.totalPackets = info->totalPackets;
@@ -212,30 +218,37 @@ void update_flow_history(int fd, struct flow_key_info *fki, struct flows_info *i
 	}
 }
 
-__u64 __diffu64Adjusted(__u64 new, __u64 old) {
-	if(old > new) {
+__u64 __diffu64Adjusted(__u64 new, __u64 old)
+{
+	if (old > new)
+	{
 		return MAX_U64 - old + new;
-	} else {
+	}
+	else
+	{
 		return new - old;
 	}
 }
 
-void process(struct flow_key_info *fki, struct flows_info *history, struct flows_info *current, double period){
-	double pps = __diffu64Adjusted(current->totalPackets,history->totalPackets)/(period*1000000);
-	double bps = __diffu64Adjusted(current->totalBytes, history->totalBytes)/ period;
-	double Mbitps = bps * 8/(1024*1024);
-	double synRate = __diffu64Adjusted(current->totalSyn , history->totalSyn)/period;
-	double ackRate = __diffu64Adjusted(current->totalAck , history->totalAck)/period;
-	double pshRate = __diffu64Adjusted(current->totalPsh , history->totalPsh)/period;
-	double rstRate = __diffu64Adjusted(current->totalRst , history->totalRst)/period;
-	double finRate = __diffu64Adjusted(current->totalFin , history->totalFin)/period;
-	if(Mbitps < 1024) {
+void process(struct flow_key_info *fki, struct flows_info *history, struct flows_info *current, double period)
+{
+	double pps = __diffu64Adjusted(current->totalPackets, history->totalPackets) / (period * 1000000);
+	double bps = __diffu64Adjusted(current->totalBytes, history->totalBytes) / period;
+	double Mbitps = bps * 8 / (1024 * 1024);
+	double synRate = __diffu64Adjusted(current->totalSyn, history->totalSyn) / period;
+	double ackRate = __diffu64Adjusted(current->totalAck, history->totalAck) / period;
+	double pshRate = __diffu64Adjusted(current->totalPsh, history->totalPsh) / period;
+	double rstRate = __diffu64Adjusted(current->totalRst, history->totalRst) / period;
+	double finRate = __diffu64Adjusted(current->totalFin, history->totalFin) / period;
+	if (Mbitps < 1024)
+	{
 		printf("%u <-> %u (%llu packets) (%llu bytes) %f million pps(*), %f Mbits/sec(**), %f seconds\n synrate: %f, ackrate: %f, pshrate: %f, rstrate: %f, finrate: %f chksum: %lu\n", fki->src_p, fki->dst_p, history->totalPackets, history->totalBytes, pps, Mbitps, period,
-	synRate, ackRate, pshRate, rstRate, finRate, ~current->checksum);
-	} else {
-		printf("%u <-> %u (%llu packets) (%llu bytes) %f million pps(*), %f Gbits/sec(**), %f seconds\n synrate: %f, ackrate: %f, pshrate: %f, rstrate: %f, finrate: %f, chksum: %lu\n", fki->src_p, fki->dst_p, history->totalPackets, history->totalBytes, pps, Mbitps/1024, period,
-	synRate, ackRate, pshRate, rstRate, finRate, ~current->checksum);
-
+			   synRate, ackRate, pshRate, rstRate, finRate, ~current->checksum);
+	}
+	else
+	{
+		printf("%u <-> %u (%llu packets) (%llu bytes) %f million pps(*), %f Gbits/sec(**), %f seconds\n synrate: %f, ackrate: %f, pshrate: %f, rstrate: %f, finrate: %f, chksum: %lu\n", fki->src_p, fki->dst_p, history->totalPackets, history->totalBytes, pps, Mbitps / 1024, period,
+			   synRate, ackRate, pshRate, rstRate, finRate, ~current->checksum);
 	}
 }
 
@@ -255,20 +268,24 @@ void map_get_keys(int fd, __u32 totalKeys, int flowsfd, int flowsbackupfd)
 			struct flows_info finfo = {0};
 			if ((bpf_map_lookup_elem(flowsfd, &value.key, &finfo)) != 0)
 			{
-					printf(
-				"unable to get finfo"
-					);
-			} else {
+				printf(
+					"unable to get finfo");
+			}
+			else
+			{
 				//printf("total packets: %llu, total bytes: %llu\n", finfo.totalPackets, finfo.totalBytes);
 				// now we check the history
 				finfo.timestamp = gettime();
 				struct flows_info history = {0};
-				if(bpf_map_lookup_elem(flowsbackupfd, &value.key, &history) != 0) {
+				if (bpf_map_lookup_elem(flowsbackupfd, &value.key, &history) != 0)
+				{
 					//printf("no backup found for this flow, so creating backup**\n");
 					update_flow_history(flowsbackupfd, &value, &finfo);
-				} else {
+				}
+				else
+				{
 					// means there is backup already for this
-					double period = claculate_period(history.timestamp,finfo.timestamp);
+					double period = claculate_period(history.timestamp, finfo.timestamp);
 					process(&value, &history, &finfo, period);
 					// printf("%llu perid calculated %f\n",history.timestamp, period);
 					// now lets update it with the newer one
@@ -325,11 +342,12 @@ static void stats_collect(int map_fd, __u32 map_type,
 	map_collect(map_fd, map_type, key, &stats_rec->stats[0]);
 }
 
-static void collect(int totalkeysfd, int flowkeysfd, int flowsfd, int flowsbackupfd){
+static void collect(int totalkeysfd, int flowkeysfd, int flowsfd, int flowsbackupfd)
+{
 	struct total_keys tk = {0};
 	map_get_total_keys(totalkeysfd, &tk);
 	//printf("total keys %u\n", tk.total_keys);
-	map_get_keys(flowkeysfd,tk.total_keys, flowsfd, flowsbackupfd);
+	map_get_keys(flowkeysfd, tk.total_keys, flowsfd, flowsbackupfd);
 }
 
 static void stats_poll(int map_fd, __u32 map_type, int interval)
@@ -419,7 +437,7 @@ int main(int argc, char **argv)
 
 	struct bpf_map_info map_expect_totalkeys = {0}, map_expect_flowskeys = {0}, map_expect_flows = {0};
 	int totalKeysFd, flowKeysFd, flowsFd, flowsBackupFd;
-	struct bpf_map_info totalkeysinfo = {0}, flowkeysinfo = {0}, flowsinfo = {0}, flowsbackupinfo={0};
+	struct bpf_map_info totalkeysinfo = {0}, flowkeysinfo = {0}, flowsinfo = {0}, flowsbackupinfo = {0};
 	int interval = 2;
 	int err;
 

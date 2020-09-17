@@ -77,53 +77,54 @@ struct bpf_map_def SEC("maps") xdp_flows_history = {
 	.max_entries = MAX_ENTRIES_FLOWS,
 };
 
-
-static __always_inline
-void checksum(struct xdp_md *ctx, __u32 *offset, __u32 *val)
+static __always_inline void checksum(struct xdp_md *ctx, __u32 *offset, __u32 *val, __u32 previous_sum)
 {
-	 void *data_end = (void *)(long)ctx->data_end;
-	 void *data = (void *)(long)ctx->data;
+	void *data_end = (void *)(long)ctx->data_end;
+	void *data = (void *)(long)ctx->data;
 
-	 __u8 *current = data + *offset;
-		int i = 0;
-	 for(i=0;i<9000;i++) {
-		 if(current + 1 > data_end) break;
+	__u16 *current = data + *offset;
+	__u32 sum = previous_sum;
+	__u32 total_payload_bytes = data_end - (data + *offset);
 
-		 *val += *current;
-		 ++current;
-	 }
+	int i;
+	for (i = 0; i < 1500; i++)
+	{
+		// if (current + i + 1 > data_end)
+		// 	break;
 
-	// if (data + *offset > data_end)
-	// {
-	// 	*val = 0;
-	// 	return;
-	// }
+		//  sum += *(current + i);
+		//  total_payload_bytes -= 2;
+		if (current + 1 > data_end)
+			break;
+		sum += *current++;
+		total_payload_bytes -= 2;
+	}
 
-	// // else
-	// __u32 sum = 0;
+	if (total_payload_bytes > 0)
+	{
+		// means that we still have 1 more byte left
+		// and what we know is that we have bytes till i
+		__u8 *final = (void *)current;
+		if (final + 1 <= data_end)
+		{
+			// we have data
+			sum += *final;
+#ifdef DEBUG
+			bpf_debug("accessing last piece of data");
+#endif
+		}
+	}
 
-	// for (int i = 0; i < 1500; i++)
-	// {
-	// 	if (data + *offset < data_end)
-	// 	{
-	// 		sum += *((__u8 *)data + *offset);
-	// 		++(*offset);
-	// 	}
-	// }
+	*val = sum;
+	// return sum;
+}
 
-	// // because the offset will not increase as soon as it is equal to the data_end
-	// // so adding the last value
-	// sum += *((__u8 *)data + *offset);
-
-	// *val = sum;
-
-	// __u8 *current = data + *offset;
-	// if (current + 1 > data_end){
-	// 	*val = 0;
-	// 	return;
-	// } else {
-	// 	*val = *(current);
-	// }
+static __always_inline __u16 checksum_fold(__u32 *csum) {
+	for(int i=0;i<10;i++){
+		if(*csum>>16 == 0) break;
+		*csum = (*csum & 0xffff) + (*csum >> 16);
+	}
+	return ~(*csum);
 }
 
 SEC("xdp_stats_kernel")
@@ -204,14 +205,11 @@ int xdp_stats(struct xdp_md *ctx)
 				return XDP_PASS;
 			// now we update the offset
 			offset += sizeof(struct tcphdr);
-			checksum(ctx, &offset, &payload_checksum);
-			// __u8 *t = (data+offset);
-
-			// if(t+1 > data_end) return XDP_PASS;
-
-			// payload_checksum = *t;
+			checksum(ctx, &offset, &payload_checksum, 0);
+			__u16 t = checksum_fold(&payload_checksum);
+		
 #ifdef DEBUG
-			bpf_debug("payload-checksum:%u\n", payload_checksum);
+			bpf_debug("payload-checksum:%u\n", t);
 #endif
 		}
 		else if (ipv4hdr->protocol == IPPROTO_UDP)
@@ -223,7 +221,8 @@ int xdp_stats(struct xdp_md *ctx)
 				return XDP_PASS;
 			// now we update the offset
 			offset += sizeof(struct udphdr);
-			checksum(ctx, &offset, &payload_checksum);
+			checksum(ctx, &offset, &payload_checksum, 0);
+			// payload_checksum = checksum(ctx, &offset, 0);
 		}
 
 		/** END of IP parsing **/
