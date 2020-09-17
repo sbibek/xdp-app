@@ -77,11 +77,21 @@ struct bpf_map_def SEC("maps") xdp_flows_history = {
 	.max_entries = MAX_ENTRIES_FLOWS,
 };
 
+
 static __always_inline
 void checksum(struct xdp_md *ctx, __u32 *offset, __u32 *val)
 {
-	void *data_end = (void *)(long)ctx->data_end;
-	void *data = (void *)(long)ctx->data;
+	 void *data_end = (void *)(long)ctx->data_end;
+	 void *data = (void *)(long)ctx->data;
+
+	 __u8 *current = data + *offset;
+		int i = 0;
+	 for(i=0;i<9000;i++) {
+		 if(current + 1 > data_end) break;
+
+		 *val += *current;
+		 ++current;
+	 }
 
 	// if (data + *offset > data_end)
 	// {
@@ -106,13 +116,14 @@ void checksum(struct xdp_md *ctx, __u32 *offset, __u32 *val)
 	// sum += *((__u8 *)data + *offset);
 
 	// *val = sum;
-	__u8 *current = data;
-	if (current + *offset > data_end){
-		*val = 0;
-		return;
-	} else {
-		*val = *(current + *offset);
-	}
+
+	// __u8 *current = data + *offset;
+	// if (current + 1 > data_end){
+	// 	*val = 0;
+	// 	return;
+	// } else {
+	// 	*val = *(current);
+	// }
 }
 
 SEC("xdp_stats_kernel")
@@ -128,7 +139,7 @@ int xdp_stats(struct xdp_md *ctx)
 	struct iphdr *ipv4hdr;
 	struct tcphdr *tcphdr;
 	struct udphdr *udphdr;
-	__u32 payload_checksum;
+	__u32 payload_checksum = 0;
 
 	/** START of ETH HEADER parsing **/
 
@@ -194,6 +205,11 @@ int xdp_stats(struct xdp_md *ctx)
 			// now we update the offset
 			offset += sizeof(struct tcphdr);
 			checksum(ctx, &offset, &payload_checksum);
+			// __u8 *t = (data+offset);
+
+			// if(t+1 > data_end) return XDP_PASS;
+
+			// payload_checksum = *t;
 #ifdef DEBUG
 			bpf_debug("payload-checksum:%u\n", payload_checksum);
 #endif

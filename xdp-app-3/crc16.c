@@ -117,7 +117,9 @@ static inline unsigned short _checksum(unsigned char *buf, int bufsz) {
 }
 
 
-
+struct test {
+    __u8 a,b,c,d;
+};
 
 
 int main(){
@@ -132,6 +134,64 @@ int main(){
 //     unsigned short t = ~_t;
 //     printf("%u, %u\n", t, _checksum(test5,3));
 
-    printf("%ld", sizeof(struct flows_info));
+    // printf("%ld", sizeof(struct flows_info));
+
+
+    // __u32 sum = 123456;
+
+    // while (sum>>16)
+    // sum = (sum & 0xFFFF) + (sum >> 16);
+
+    // printf("%d", sum>>16);
+
+    // return 0;
+
+    void *test = "1234";
+    __u8 *current = test;
+    void *end = current + 4;
+    // printf("%lu", end-current);
+
+    struct test *t = (void *)current;
+
+
+    printf("%u", *(__u8 *)end);
+   
+    // for(int i=0;i<4;i++){
+    //     printf("%d => %u\n",i, *current);
+    //     ++current;
+    // }
     return 0;
 }
+
+
+
+// 4.1  "C"
+
+//    The following "C" code algorithm computes the checksum with an inner
+//    loop that sums 16-bits at a time in a 32-bit accumulator.
+
+//    in 6
+//        {
+//            /* Compute Internet Checksum for "count" bytes
+//             *         beginning at location "addr".
+//             */
+//        register long sum = 0;
+
+//         while( count > 1 )  {
+//            /*  This is the inner loop */
+//                sum += * (unsigned short) addr++;
+//                count -= 2;
+//        }
+
+//            /*  Add left-over byte, if any */
+//        if( count > 0 )
+//                sum += * (unsigned char *) addr;
+
+//            /*  Fold 32-bit sum to 16 bits */
+//        while (sum>>16)
+//            sum = (sum & 0xffff) + (sum >> 16);
+
+//        checksum = ~sum;
+//    }
+
+
