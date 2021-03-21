@@ -158,28 +158,28 @@ struct bpf_map_def SEC("maps") xdp_flows_history = {
 // 	return sum;
 // }
 
-static __always_inline __u32 sum16(void *data, void *data_end)
-{
-	if (data < data_end)
-	{
-		__u8 *current = data;
-		__u32 sum = 0;
+// static __always_inline __u32 sum16(void *data, void *data_end)
+// {
+// 	if (data < data_end)
+// 	{
+// 		__u8 *current = data;
+// 		__u32 sum = 0;
 
-		int i;
-		for (i = 1; i < 1500; i++)
-		{
-			sum += *(current+i);
+// 		int i;
+// 		for (i = 1; i < 1500; i++)
+// 		{
+// 			sum += *(current+i);
 
-			if (current +i >= data_end)
-				break;
-		}
-		return sum;
-	}
-	else
-	{
-		return 0;
-	}
-}
+// 			if (current +i >= data_end)
+// 				break;
+// 		}
+// 		return sum;
+// 	}
+// 	else
+// 	{
+// 		return 0;
+// 	}
+// }
 
 #ifndef TEST
 static __always_inline
@@ -212,7 +212,7 @@ static __always_inline
 			metadata->length = data_end - current;
 			metadata->key = metadata->ip_src ^ metadata->ip_dst ^ metadata->src_p ^ metadata->dst_p ^ metadata->ip_protocol;
 			// if(current < data_end)
-			metadata->payload_checksum = sum16(current, data_end);
+			// metadata->payload_checksum = sum16(current, data_end);
 		}
 	}
 	else if (iph->protocol == IPPROTO_TCP)
@@ -236,7 +236,7 @@ static __always_inline
 			metadata->length = data_end - current;
 			metadata->key = metadata->ip_src ^ metadata->ip_dst ^ metadata->src_p ^ metadata->dst_p ^ metadata->ip_protocol;
 			// if(current < data_end)
-			metadata->payload_checksum = sum16(current, data_end);
+			// metadata->payload_checksum = sum16(current, data_end);
 		}
 	}
 
@@ -327,6 +327,7 @@ static __always_inline void update_maps(struct packet_metadata *metadata, u16 et
 				.dst_p = metadata->dst_p,
 				.ip_protocol = metadata->ip_protocol,
 			};
+			// lock_xadd(&keysCount->total_keys, 1);
 			bpf_map_update_elem(&xdp_flow_keys, &keysCount->total_keys, &flowKeyInfo, BPF_ANY);
 			// lock_xadd(&keysCount->total_keys, 1);
 

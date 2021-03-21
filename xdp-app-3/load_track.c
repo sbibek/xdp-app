@@ -346,7 +346,7 @@ static void collect(int totalkeysfd, int flowkeysfd, int flowsfd, int flowsbacku
 {
 	struct total_keys tk = {0};
 	map_get_total_keys(totalkeysfd, &tk);
-	//printf("total keys %u\n", tk.total_keys);
+	printf("total keys %u\n", tk.total_keys);
 	map_get_keys(flowkeysfd, tk.total_keys, flowsfd, flowsbackupfd);
 }
 
